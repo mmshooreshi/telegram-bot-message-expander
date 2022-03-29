@@ -10,6 +10,7 @@ require 'json'
 
 $json_url = "#{ENV["JSON_URL"]}"
 $json_api = "#{ENV["JSON_API"]}"
+$logVar=1
 
 def getJson
   uri = URI($json_url)
