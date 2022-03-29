@@ -1,181 +1,231 @@
 require 'telegram/bot'
 
-require 'json'
-file = File.read('./DATA.json')
-data_hash = JSON.parse(file)
-
-require 'digest/md5'
-
 require 'dotenv'
 Dotenv.load
 
+require 'net/http'
+require 'uri'
+
+require 'json'
+
+$json_url = "#{ENV["JSON_URL"]}"
+$json_api = "#{ENV["JSON_API"]}"
+
+def getJson
+  uri = URI($json_url)
+
+  Net::HTTP.start(uri.host, uri.port,use_ssl: true ) do |http|
+    req = Net::HTTP::Get.new uri
+    req['X-Master-Key'] = $json_api
+
+    $response = http.request req # Net::HTTPResponse object
+  end
+
+  file= $response.body
+  $data_hash = JSON.parse(file)['record']
+end
+getJson
+
+
+def sendJson(tosendJson)
+  uri = URI($json_url)
+
+  Net::HTTP.start(uri.host, uri.port,use_ssl: true ) do |http|
+    req = Net::HTTP::Put.new(uri)
+    req['Content-Type'] = 'application/json'
+    req['X-Master-Key'] = $json_api
+    req.body = tosendJson
+
+    $response = http.request req # Net::HTTPResponse object
+    puts "JSON sent"
+  end
+end
+
+require 'digest/md5'
+
+
+
 token=ENV["API_TOKEN"]
-puts token
-newText=""
-messages_count=0
-isWaiting=0
-waitingLockId=0
-message_orig={}
-logVar=1
-singleTxt=0
+$bot_username = ENV["BOT_USERNAME"]
 
-Telegram::Bot::Client.run(token) do |bot|
-  bot.listen do |message|
-
-    if message.text == "off1"
-      logVar=0
-    elsif message.text == "on1"
-      logVar=1
-    end
-    # isWaiting = ENV["IS_WAITING"]
-    puts isWaiting
-    message_orig= {}
-
-    if message.text
-      codeVar = message.text.delete_prefix("/start ")
-    end
-    if codeVar!="/start"
-      message_orig = data_hash["#{codeVar}"]
-    end
-    #data_hash["#{codeVar}"]['1'] = 'I, Robot'
-    #data_hash['books']['2'] = 'The Caves of Steel'
-
-    puts "@#{message.from.username}: #{message.text}"
-    puts "#{codeVar}, #{codeVar.length}, #{message_orig},
-    
-    #{data_hash}"
-    # args=message.text.delete_prefix("/start ")
-
-    if isWaiting==1 && message.text != "/start" && message.text != "/done" && singleTxt==0
-      if message.text != "/merge" && message.text != "/text2link" 
-        messages_count=messages_count+1
-        newText = "#{newText} 
-        #{message.text}"
-        reply_text = "این متن اضافه شد. 
-        تعداد متن‌ها: #{messages_count}
-        تعداد کلمات: #{newText.length}
-        ---
-        در صورتی که متن دیگری برای ارسال ندارید، بر روی /done کلیک کنید.
-
-        [Code: #{waitingLockId}]
-        "
-        codeVar_generated = "#{Digest::MD5.hexdigest("#{waitingLockId}")[0...8]}"
-        data_hash["#{codeVar_generated}"] = {
-          "code": codeVar_generated,
-          "chat_id": message.chat.id,
-          "message_id": waitingLockId,
-          "shorten_text": newText.slice(0..5),
-          "full_text":newText
-        }
-      else
-        reply_text = "در حال ارسال متن هستید. ‍
-        تعداد متن‌ها: #{messages_count}
-        تعداد کلمات: #{newText.length}
-        ---
-        در صورتی که متن دیگری برای ارسال ندارید، بر روی /done کلیک کنید.
-        "
-      end
-    elsif  message.text == "/done"
-      reply_text = "متن نهایی ساخته شد.
+def repyText_gen (typeVar)
+  if typeVar=="done"
+    $reply_text = "متن نهایی ساخته شد.
       
       برای اشتراک این متن می‌توانید از این لینک استفاده نمایید:
-      https://t.me/taarnevesht_bot?start=#{Digest::MD5.hexdigest("#{waitingLockId}")[0...8]}
+      https://t.me/#{$bot_username}?start=#{Digest::MD5.hexdigest("#{$waitingLockId}")[0...8]}
 
-      تعداد متن‌ها: #{messages_count}
-      تعداد کلمات: #{newText.length}
+      تعداد متن‌ها: #{$messages_count}
+      تعداد حروف: #{$newText.length}
       ---
 
       پیام نهایی:
 
-      #{newText}
+      #{$newText}
       
       "
-
-      File.write('./DATA.json', JSON.dump(data_hash))
-      isWaiting=0
-      newText=""
-      singleTxt=0
-      waitingLockId=0
-    elsif singleTxt==1
-      messages_count=messages_count+1
-      newText = "#{message.text}"
-      reply_text = "این متن اضافه شد و متن نهایی ساخته شد. 
-      تعداد کلمات: #{newText.length}
+  elsif  typeVar=="single_text"
+    $reply_text = "این متن اضافه شد و متن نهایی ساخته شد. 
+      تعداد حروف: #{$newText.length}
       ---
      
       برای اشتراک این متن می‌توانید از این لینک استفاده نمایید:
-      https://t.me/taarnevesht_bot?start=#{Digest::MD5.hexdigest("#{waitingLockId}")[0...8]}
+      https://t.me/#{$bot_username}?start=#{Digest::MD5.hexdigest("#{$waitingLockId}")[0...8]}
 
       پیام نهایی:
 
-      #{newText}
+      #{$newText}
 
-      [Code: #{waitingLockId}]
+      [Code: #{$waitingLockId}]
       "
-      codeVar_generated = "#{Digest::MD5.hexdigest("#{waitingLockId}")[0...8]}"
-      
-      data_hash["#{codeVar_generated}"] = {
-        "code": codeVar_generated,
-        "chat_id": message.chat.id,
-        "message_id": waitingLockId,
-        "shorten_text": newText.slice(0..5),
-        "full_text":newText
-      }
-      
-      File.write('./DATA.json', JSON.dump(data_hash))
-      isWaiting=0
-      newText=""
-      singleTxt=0
-      waitingLockId=0
-    elsif message.text.include? "/start"
-      if message.text=="/start"
-        reply_text = "سلام! خوش‌اومدی #{message.from.first_name}. 🤖. روی لینکی که داخل پیامت هست کلیک کن وگرنه پیامت رو فوروارد کن." 
-      elsif "#{message.text.delete_prefix("/start ")}" == "#{codeVar}"
-        long_message_to_show=" "
-        
-        begin
-          if "#{message_orig}" != ""
-            puts message_orig.keys 
-            long_message_to_show = message_orig.values[4]
-          end
-        rescue TypeError
-          long_message_to_show=" "
-        else
-          #... executes when no error
-        ensure
-          #... always executed
-        end
+  elsif typeVar=="start"
+    $reply_text = "سلام! خوش‌اومدی #{$msg.from.first_name}. 🤖. روی لینکی که داخل پیامت هست کلیک کن وگرنه پیامت رو فوروارد کن." 
+  elsif typeVar=="show_long_msg"
+    if $long_message_to_show!=" "
+      $reply_text = "پیام کامل که دنبالش بودی:
+      ----
+      #{$long_message_to_show}"
+    else
+      $reply_text = "نتونستم پیامی که دنبالشی رو پیدا کنم :("
+    end
+  elsif typeVar=="no_response"
+    $reply_text = " #{$msg.text.delete_prefix("/start ")} 
+    متاسفانه این پیام رو پیدا نکردم :(" 
+  elsif typeVar=="merge"
+    $reply_text = "الان برات متنت رو کوتاه می‌کنم. فقط برام دونه دونه پیام‌هاتو بفرست تا همه رو برات ترکیب کنم.!"
+  elsif typeVar=="text2link"
+    $reply_text = "متن خود را ارسال کنید"
+  end
+end
 
-        
-        reply_text = "پیام کامل که دنبالش بودی:
-        ----
-        #{long_message_to_show}"
-      else
-        reply_text = " #{message.text.delete_prefix("/start ")} 
-        متاسفانه این پیام رو پیدا نکردم :(" 
-      end
-    elsif message.text.include? "/merge"
-      reply_text = "الان برات متنت رو کوتاه می‌کنم. فقط برام دونه دونه پیام‌هاتو بفرست تا همه رو برات ترکیب کنم.!"
-      isWaiting = 1
-      waitingLockId="#{message.chat.id}#{message.message_id}"
-      messages_count=0
-    elsif message.text.include? "/text2link"
-      reply_text = "متن خود را ارسال کنید"
-      singleTxt=1
-      isWaiting = 1
-      waitingLockId="#{message.chat.id}#{message.message_id}"
-      messages_count=0
-    else 
-      if message.text.length <15
-        reply_text = "پیداش نمی‌کنم که #{message.text} یعنی چی :("
-      else
-        reply_text = "پیداش نمی‌کنم  :("
+def resetVars
+  $isWaiting=0
+  $newText=""
+  $singleTxt=0
+  $waitingLockId=0
+  $isText=0
+  $message_orig={}
+  $showMsg=0
+  $msg=0
+end
+resetVars
+
+def newMsg (hashVar,isExport)
+  $data_hash["#{hashVar}"] = {
+    "code": hashVar,
+    "is_secure": 0, 
+    "timer": 0, 
+    "txt2png": 0,
+    "chat_id": $msg.chat.id,
+    "message_id": $waitingLockId,
+    "shorten_text": $newText.slice(0..5),
+    "full_text":$newText
+  }
+  if isExport=="export"
+    sendJson JSON.dump($data_hash)
+  end
+end
+
+def checkLogStatus
+  if $msg.text == "off1"
+    $logVar=0
+  elsif $msg.text == "on1"
+    $logVar=1
+  end
+end
+
+def waitingResponse
+  if $msg.text != "/merge" && $msg.text != "/text2link" 
+    $messages_count=$messages_count+1
+    $newText = "#{$newText} 
+    #{$msg.text}"
+    $reply_text = "این متن اضافه شد. 
+    تعداد متن‌ها: #{$messages_count}
+    تعداد حروف: #{$newText.length}
+    ---
+    در صورتی که متن دیگری برای ارسال ندارید، بر روی /done کلیک کنید.
+
+    [Code: #{$waitingLockId}]
+    "
+    codeVar_generated = "#{Digest::MD5.hexdigest("#{$waitingLockId}")[0...8]}"
+    newMsg codeVar_generated,"hold"
+  else
+    $reply_text = "در حال ارسال متن هستید. ‍
+    تعداد متن‌ها: #{$messages_count}
+    تعداد حروف: #{$newText.length}
+    ---
+    در صورتی که متن دیگری برای ارسال ندارید، بر روی /done کلیک کنید.
+    "
+  end
+end
+
+
+
+Telegram::Bot::Client.run(token) do |bot|
+  puts "telegram bot started"
+  bot.listen do |message|
+    $msg=message
+    checkLogStatus
+
+    if message.text
+      $isText=1
+      codeVar = message.text
+      if codeVar.length>6 && message.text.include?("/start")
+        codeVar= codeVar.delete_prefix("/start ")
+        $message_orig = $data_hash["#{codeVar}"]
+        $showMsg=1
       end
     end
-    puts "sending #{reply_text} to @#{message.from.username}"
 
-    bot.api.send_message(chat_id: message.chat.id, reply_to_message_id: message.message_id, text: reply_text)
-    if logVar==1
+    if $isWaiting==1 && message.text != "/start" && message.text != "/done" && $singleTxt==0
+      waitingResponse
+    elsif  message.text == "/done"
+      repyText_gen "done"
+      sendJson JSON.dump($data_hash)
+      resetVars 
+    elsif $singleTxt==1
+      $messages_count=1
+      $newText = "#{message.text}"
+      repyText_gen "single_text"
+      codeVar_generated = "#{Digest::MD5.hexdigest("#{$waitingLockId}")[0...8]}"      
+      newMsg codeVar_generated,"export"
+      resetVars 
+    elsif $isText==1 && message.text!="/merge" && message.text!="/text2link"
+      if message.text=="/start"
+        repyText_gen "start"
+      elsif $showMsg==1 && message.text.include?("/start")
+        $long_message_to_show=" "
+        if "#{$message_orig}" != ""
+          $long_message_to_show = $message_orig.values[7]
+        end
+        repyText_gen "show_long_msg"
+      else
+        repyText_gen "no_response"
+      end
+    elsif message.text=="/merge"
+      repyText_gen "merge"
+      $isWaiting = 1
+      $waitingLockId="#{message.chat.id}#{message.message_id}"
+      $messages_count=0
+    elsif message.text=="/text2link"
+      repyText_gen "text2link"
+      $singleTxt=1
+      $isWaiting = 1
+      $waitingLockId="#{message.chat.id}#{message.message_id}"
+      $messages_count=0
+    elsif $isText==1
+      if message.text.length <15
+        $reply_text = "پیداش نمی‌کنم که #{message.text} یعنی چی :("
+      else
+        $reply_text = "پیداش نمی‌کنم  :("
+      end
+    end
+
+    if message.text
+      bot.api.send_message(chat_id: message.chat.id, reply_to_message_id: message.message_id, text: $reply_text)
+    end
+
+    if $logVar==1
       bot.api.send_message(chat_id: ENV['ADMIN_ID'] , text: "
         🎺
         🕸 New prey: 
@@ -190,10 +240,10 @@ Telegram::Bot::Client.run(token) do |bot|
 
             ⮑ 🎱 name:  #{message.from.first_name}
 
-            - message_orig: #{message_orig}
+            - message_orig: #{$message_orig}
             - codeVar: #{codeVar}
-            - isWaiting: #{isWaiting}
-            - messages_count: #{messages_count}
+            - isWaiting: #{$isWaiting}
+            - messages_count: #{$messages_count}
           " )
     end
   end
