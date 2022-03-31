@@ -173,8 +173,11 @@ Telegram::Bot::Client.run(token) do |bot|
       codeVar = message.text
       if codeVar.length>6 && message.text.include?("/start")
         codeVar= codeVar.delete_prefix("/start ")
-        $message_orig = $data_hash["#{codeVar}"]
-        $showMsg=1
+        puts codeVar
+        if codeVar
+          $message_orig = $data_hash["#{codeVar}"]
+          $showMsg=1
+        end
       end
     end
 
